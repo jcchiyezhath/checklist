@@ -11,7 +11,7 @@
     <header class="top">
       <div>
         <h1>Checklist</h1>
-        <p class="sub">Saved on this device. Works great on GitHub Pages.</p>
+        <p class="sub">Sync across devices using a Trip Code.</p>
       </div>
 
       <div class="top-actions">
@@ -23,6 +23,15 @@
         <button id="btnReset" class="btn danger">Reset</button>
       </div>
     </header>
+
+    <section class="card">
+      <div class="row" style="grid-template-columns: 110px 1fr auto;">
+        <label class="label">Trip Code</label>
+        <input id="tripCodeInput" type="text" placeholder="Example: TN4days-2026" />
+        <button id="btnConnect" class="btn primary">Connect</button>
+      </div>
+      <p id="syncStatus" class="sub" style="margin-top:10px;">Not connected</p>
+    </section>
 
     <section class="card">
       <div class="row">
@@ -61,6 +70,6 @@
     </section>
   </div>
 
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
