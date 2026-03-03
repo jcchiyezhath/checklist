@@ -53,6 +53,10 @@ const btnReset = $("btnReset");
 const tripCodeInput = $("tripCodeInput");
 const btnConnect = $("btnConnect");
 const syncStatus = $("syncStatus");
+// Paste Import UI
+const pasteListTitle = $("pasteListTitle");
+const pasteBox = $("pasteBox");
+const btnPasteImport = $("btnPasteImport");
 
 const templates = document.querySelectorAll("[data-template]");
 
@@ -327,9 +331,74 @@ const TEMPLATE_DOG = [
   "Vet contact saved"
 ];
 
+function pasteImportToNewList() {
+  const title = (pasteListTitle?.value || "").trim() || "janikutty checklist";
+  const raw = (pasteBox?.value || "").trim();
+
+  if (!raw) {
+    alert("Paste the checklist text first.");
+    return;
+  }
+
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const importedItems = [];
+  for (const line of lines) {
+    const isCheckbox =
+      line.startsWith("☐") ||
+      line.startsWith("✅") ||
+      line.startsWith("✔") ||
+      line.startsWith("- [ ]") ||
+      line.startsWith("- [x]") ||
+      line.startsWith("* [ ]") ||
+      line.startsWith("* [x]");
+
+    if (!isCheckbox) continue;
+
+    const done =
+      line.startsWith("✅") ||
+      line.startsWith("✔") ||
+      line.startsWith("- [x]") ||
+      line.startsWith("* [x]");
+
+    const text = line
+      .replace(/^☐\s*/, "")
+      .replace(/^✅\s*/, "")
+      .replace(/^✔\s*/, "")
+      .replace(/^- \[( |x)\]\s*/i, "")
+      .replace(/^\* \[( |x)\]\s*/i, "")
+      .trim();
+
+    if (text) items.push({ id: uid(), text, done });
+  }
+
+  if (items.length === 0) {
+    alert("I couldn’t find any checkbox lines (☐). Make sure your pasted text includes ☐ items.");
+    return;
+  }
+
+  const id = uid();
+  state.lists[id] = { id, name: title, items };
+  state.activeListId = id;
+
+  pasteBox.value = "";
+
+  persist();
+  renderLists();
+  renderItems();
+
+  alert(`Imported ${items.length} items into "${title}".`);
+}
+
+
 function loadTemplate(type) {
   const list = getActiveList();
   const items = type === "dog" ? TEMPLATE_DOG : TEMPLATE_TENNESSEE;
+
+  
 
   const existing = new Set(list.items.map((i) => i.text.toLowerCase()));
   for (const text of items) {
@@ -474,6 +543,10 @@ btnConnect.addEventListener("click", () => connectTrip(tripCodeInput.value));
 tripCodeInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") connectTrip(tripCodeInput.value);
 });
+
+if (btnPasteImport) {
+  btnPasteImport.addEventListener("click", pasteImportToNewList);
+}
 
 // Initial render (local)
 renderLists();
