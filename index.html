@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checklist</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1>Checklist</h1>
+        <p class="sub">Saved on this device. Works great on GitHub Pages.</p>
+      </div>
+
+      <div class="top-actions">
+        <button id="btnExport" class="btn">Export</button>
+        <label class="btn file">
+          Import
+          <input id="fileImport" type="file" accept="application/json" />
+        </label>
+        <button id="btnReset" class="btn danger">Reset</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <label class="label">Choose list</label>
+        <select id="listSelect"></select>
+        <button id="btnNewList" class="btn">New list</button>
+        <button id="btnRenameList" class="btn">Rename</button>
+        <button id="btnDeleteList" class="btn danger">Delete</button>
+      </div>
+
+      <div class="progress">
+        <div class="bar"><div id="progressBar" class="fill"></div></div>
+        <div id="progressText" class="pct">0/0</div>
+      </div>
+
+      <div class="add">
+        <input id="itemInput" type="text" placeholder="Add a new item (e.g., HDMI cable)" />
+        <button id="btnAddItem" class="btn primary">Add</button>
+      </div>
+
+      <ul id="items" class="items"></ul>
+
+      <div class="footer-actions">
+        <button id="btnUncheckAll" class="btn">Uncheck all</button>
+        <button id="btnCheckAll" class="btn">Check all</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Quick add templates</h2>
+      <p class="sub">One tap to load a ready list (you can edit after).</p>
+      <div class="templates">
+        <button class="btn" data-template="tennessee">Load Tennessee (your gear)</button>
+        <button class="btn" data-template="dog">Load Dog travel</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
