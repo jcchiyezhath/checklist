@@ -61,6 +61,25 @@
     </section>
 
     <section class="card">
+      <section class="card">
+  <h2>Paste Import</h2>
+  <p class="sub">Paste a checklist message (it will grab only the ☐ lines and make them items).</p>
+
+  <div class="add" style="grid-template-columns: 1fr auto;">
+    <input id="pasteListTitle" type="text" placeholder="New list title (e.g., janikutty checklist)" />
+    <button id="btnPasteImport" class="btn primary">Import</button>
+  </div>
+
+  <div style="margin-top:10px;">
+    <textarea id="pasteBox" rows="10" style="width:100%; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.15); color:#e7eefc; outline:none;"
+      placeholder="Paste your checklist text here..."></textarea>
+  </div>
+
+  <p class="sub" style="margin-top:10px;">
+    Tip: It will extract lines that start with ☐, ☐, or contain checkbox bullets.
+  </p>
+</section>
+      
       <h2>Quick add templates</h2>
       <p class="sub">One tap to load a ready list (you can edit after).</p>
       <div class="templates">
