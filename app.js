@@ -348,14 +348,15 @@ function pasteImportToNewList() {
   const importedItems = [];
   for (const line of lines) {
     const isCheckbox =
-      line.startsWith("☐") ||
-      line.startsWith("✅") ||
-      line.startsWith("✔") ||
-      line.startsWith("- [ ]") ||
-      line.startsWith("- [x]") ||
-      line.startsWith("* [ ]") ||
-      line.startsWith("* [x]");
-
+  line.startsWith("☐") ||
+  line.startsWith("□") ||
+  line.startsWith("▢") ||
+  line.startsWith("✅") ||
+  line.startsWith("✔") ||
+  line.startsWith("- [ ]") ||
+  line.startsWith("- [x]") ||
+  line.startsWith("* [ ]") ||
+  line.startsWith("* [x]");
     if (!isCheckbox) continue;
 
     const done =
@@ -365,12 +366,12 @@ function pasteImportToNewList() {
       line.startsWith("* [x]");
 
     const text = line
-      .replace(/^☐\s*/, "")
-      .replace(/^✅\s*/, "")
-      .replace(/^✔\s*/, "")
-      .replace(/^- \[( |x)\]\s*/i, "")
-      .replace(/^\* \[( |x)\]\s*/i, "")
-      .trim();
+  .replace(/^[☐□▢]\s*/, "") 
+  .replace(/^✅\s*/, "")
+  .replace(/^✔\s*/, "")
+  .replace(/^- \[( |x)\]\s*/i, "")
+  .replace(/^\* \[( |x)\]\s*/i, "")
+  .trim();
 
     if (text) items.push({ id: uid(), text, done });
   }
