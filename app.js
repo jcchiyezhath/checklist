@@ -345,28 +345,30 @@ function pasteImportToNewList() {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const importedItems = [];
+  const items = [];
   for (const line of lines) {
     const isCheckbox =
   line.startsWith("☐") ||
   line.startsWith("□") ||
-  line.startsWith("▢") ||
+  line.startsWith("☑") ||
   line.startsWith("✅") ||
   line.startsWith("✔") ||
   line.startsWith("- [ ]") ||
   line.startsWith("- [x]") ||
   line.startsWith("* [ ]") ||
   line.startsWith("* [x]");
+    
     if (!isCheckbox) continue;
 
     const done =
-      line.startsWith("✅") ||
-      line.startsWith("✔") ||
-      line.startsWith("- [x]") ||
-      line.startsWith("* [x]");
+     line.startsWith("☑") ||
+  line.startsWith("✅") ||
+  line.startsWith("✔") ||
+  line.startsWith("- [x]") ||
+  line.startsWith("* [x]");
 
     const text = line
-  .replace(/^[☐□▢]\s*/, "") 
+ .replace(/^(☐|□|☑)\s*/, "")
   .replace(/^✅\s*/, "")
   .replace(/^✔\s*/, "")
   .replace(/^- \[( |x)\]\s*/i, "")
