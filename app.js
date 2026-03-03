@@ -1,11 +1,41 @@
-const STORAGE_KEY = "checklist_app_v1";
+// Firebase (CDN modules)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
+// Your Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyBHwRjGAQWAMhNERUnC3US9Pjn0pcLYEew",
+  authDomain: "checklist-8b760.firebaseapp.com",
+  projectId: "checklist-8b760",
+  storageBucket: "checklist-8b760.firebasestorage.app",
+  messagingSenderId: "95517221504",
+  appId: "1:95517221504:web:da5b85b6c809b2886f7c65"
+};
+
+// App init
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
+
+// UI helpers
 const $ = (id) => document.getElementById(id);
 
 const listSelect = $("listSelect");
 const itemInput = $("itemInput");
 const itemsEl = $("items");
-
 const progressBar = $("progressBar");
 const progressText = $("progressText");
 
@@ -20,7 +50,29 @@ const btnExport = $("btnExport");
 const fileImport = $("fileImport");
 const btnReset = $("btnReset");
 
+const tripCodeInput = $("tripCodeInput");
+const btnConnect = $("btnConnect");
+const syncStatus = $("syncStatus");
+
 const templates = document.querySelectorAll("[data-template]");
+
+// Local fallback key
+const LOCAL_KEY = "checklist_app_local_state_v2";
+const LAST_TRIP_KEY = "checklist_last_trip_code_v1";
+
+// Firestore collection/doc
+const COLLECTION = "shared_checklists";
+
+// Sync state
+let state = loadLocalState();
+let activeTripCode = localStorage.getItem(LAST_TRIP_KEY) || "";
+let unsub = null;
+let isApplyingRemote = false;
+let saveTimer = null;
+let authed = false;
+
+// Prefill trip code input
+tripCodeInput.value = activeTripCode;
 
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
@@ -30,18 +82,14 @@ function defaultState() {
   return {
     activeListId: "tennessee",
     lists: {
-      tennessee: {
-        id: "tennessee",
-        name: "Tennessee (4 days)",
-        items: []
-      }
+      tennessee: { id: "tennessee", name: "Tennessee (4 days)", items: [] }
     }
   };
 }
 
-function loadState() {
+function loadLocalState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LOCAL_KEY);
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.lists) return defaultState();
@@ -51,28 +99,36 @@ function loadState() {
   }
 }
 
-function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function saveLocalState() {
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
 }
 
-let state = loadState();
+function setStatus(text) {
+  syncStatus.textContent = text;
+}
+
+function normalizeTripCode(code) {
+  return (code || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-_.]/g, ""); // keep safe chars
+}
 
 function getActiveList() {
   const list = state.lists[state.activeListId];
   if (list) return list;
 
-  // fallback to first list
   const firstKey = Object.keys(state.lists)[0];
   state.activeListId = firstKey || "tennessee";
   if (!state.lists[state.activeListId]) state = defaultState();
-  saveState(state);
   return state.lists[state.activeListId];
 }
 
 function renderLists() {
   listSelect.innerHTML = "";
   const ids = Object.keys(state.lists);
-  ids.sort((a,b) => state.lists[a].name.localeCompare(state.lists[b].name));
+  ids.sort((a, b) => state.lists[a].name.localeCompare(state.lists[b].name));
 
   for (const id of ids) {
     const opt = document.createElement("option");
@@ -96,7 +152,7 @@ function renderItems() {
     cb.checked = !!item.done;
     cb.addEventListener("change", () => {
       item.done = cb.checked;
-      saveState(state);
+      persist();
       renderItems();
     });
 
@@ -107,15 +163,14 @@ function renderItems() {
     del.className = "icon-btn";
     del.textContent = "Remove";
     del.addEventListener("click", () => {
-      list.items = list.items.filter(x => x.id !== item.id);
-      saveState(state);
+      list.items = list.items.filter((x) => x.id !== item.id);
+      persist();
       renderItems();
     });
 
     li.appendChild(cb);
     li.appendChild(label);
     li.appendChild(del);
-
     itemsEl.appendChild(li);
   }
 
@@ -125,27 +180,10 @@ function renderItems() {
 function updateProgress() {
   const list = getActiveList();
   const total = list.items.length;
-  const done = list.items.filter(i => i.done).length;
-
+  const done = list.items.filter((i) => i.done).length;
   progressText.textContent = `${done}/${total}`;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   progressBar.style.width = `${pct}%`;
-}
-
-function addItem(text) {
-  const trimmed = (text || "").trim();
-  if (!trimmed) return;
-
-  const list = getActiveList();
-  list.items.unshift({
-    id: uid(),
-    text: trimmed,
-    done: false
-  });
-
-  saveState(state);
-  itemInput.value = "";
-  renderItems();
 }
 
 function promptText(message, fallback = "") {
@@ -155,11 +193,22 @@ function promptText(message, fallback = "") {
   return t.length ? t : null;
 }
 
+function addItem(text) {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return;
+
+  const list = getActiveList();
+  list.items.unshift({ id: uid(), text: trimmed, done: false });
+  itemInput.value = "";
+  persist();
+  renderItems();
+}
+
 function createList(name) {
   const id = uid();
   state.lists[id] = { id, name, items: [] };
   state.activeListId = id;
-  saveState(state);
+  persist();
   renderLists();
   renderItems();
 }
@@ -167,7 +216,7 @@ function createList(name) {
 function renameActiveList(newName) {
   const list = getActiveList();
   list.name = newName;
-  saveState(state);
+  persist();
   renderLists();
 }
 
@@ -182,15 +231,15 @@ function deleteActiveList() {
 
   delete state.lists[list.id];
   state.activeListId = Object.keys(state.lists)[0];
-  saveState(state);
+  persist();
   renderLists();
   renderItems();
 }
 
 function setAll(doneValue) {
   const list = getActiveList();
-  list.items.forEach(i => i.done = doneValue);
-  saveState(state);
+  list.items.forEach((i) => (i.done = doneValue));
+  persist();
   renderItems();
 }
 
@@ -205,7 +254,6 @@ function exportData() {
   document.body.appendChild(a);
   a.click();
   a.remove();
-
   URL.revokeObjectURL(url);
 }
 
@@ -216,7 +264,7 @@ function importData(file) {
       const parsed = JSON.parse(reader.result);
       if (!parsed || !parsed.lists) throw new Error("Invalid file");
       state = parsed;
-      saveState(state);
+      persist();
       renderLists();
       renderItems();
     } catch {
@@ -229,14 +277,12 @@ function importData(file) {
 function hardReset() {
   if (!confirm("Reset all lists and items on this device?")) return;
   state = defaultState();
-  saveState(state);
+  persist();
   renderLists();
   renderItems();
 }
 
-/* templates */
 const TEMPLATE_TENNESSEE = [
-  // Electronics & media
   "JBL speaker",
   "JBL speaker charger cable",
   "Power generator / power station",
@@ -250,8 +296,6 @@ const TEMPLATE_TENNESSEE = [
   "HDMI cable",
   "USB-C cable",
   "Extra adapters (if needed)",
-
-  // Cameras
   "Main camera",
   "Main camera charger",
   "DJI / action camera",
@@ -259,14 +303,10 @@ const TEMPLATE_TENNESSEE = [
   "Selfie stick",
   "SD cards",
   "Camera bag",
-
-  // Personal
   "Credit cards (1–2)",
   "Driver’s license",
   "Black Adidas pouch",
   "Briefcase",
-
-  // Travel / food
   "Cooler",
   "Indian store chips",
   "Other snacks",
@@ -289,20 +329,107 @@ const TEMPLATE_DOG = [
 
 function loadTemplate(type) {
   const list = getActiveList();
-  const items = (type === "dog") ? TEMPLATE_DOG : TEMPLATE_TENNESSEE;
+  const items = type === "dog" ? TEMPLATE_DOG : TEMPLATE_TENNESSEE;
 
-  // Add without duplicates
-  const existing = new Set(list.items.map(i => i.text.toLowerCase()));
+  const existing = new Set(list.items.map((i) => i.text.toLowerCase()));
   for (const text of items) {
     if (!existing.has(text.toLowerCase())) {
       list.items.push({ id: uid(), text, done: false });
     }
   }
-  saveState(state);
+  persist();
   renderItems();
 }
 
-/* events */
+// Persist: local + (if connected) cloud
+function persist() {
+  saveLocalState();
+  queueCloudSave();
+}
+
+function queueCloudSave() {
+  if (!activeTripCode || !authed) return;
+  if (isApplyingRemote) return;
+
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const ref = doc(db, COLLECTION, activeTripCode);
+      await updateDoc(ref, {
+        state,
+        updatedAt: serverTimestamp()
+      });
+      setStatus(`Connected: ${activeTripCode} (synced)`);
+    } catch (e) {
+      // If doc doesn't exist yet, create it
+      try {
+        const ref = doc(db, COLLECTION, activeTripCode);
+        await setDoc(ref, { state, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+        setStatus(`Connected: ${activeTripCode} (created + synced)`);
+      } catch {
+        setStatus(`Connected: ${activeTripCode} (sync error)`);
+      }
+    }
+  }, 250);
+}
+
+async function connectTrip(codeRaw) {
+  const code = normalizeTripCode(codeRaw);
+  if (!code) {
+    alert("Enter a Trip Code (example: TN4days-2026).");
+    return;
+  }
+
+  // Stop previous listener
+  if (unsub) unsub();
+  activeTripCode = code;
+  localStorage.setItem(LAST_TRIP_KEY, activeTripCode);
+
+  setStatus(`Connecting: ${activeTripCode}...`);
+
+  const ref = doc(db, COLLECTION, activeTripCode);
+
+  // Create doc if missing (so listener has something to watch)
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    await setDoc(ref, { state, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+  }
+
+  unsub = onSnapshot(ref, (docSnap) => {
+    const data = docSnap.data();
+    if (!data || !data.state) return;
+
+    // Apply remote without re-saving back immediately
+    isApplyingRemote = true;
+    try {
+      state = data.state;
+      saveLocalState();
+      renderLists();
+      renderItems();
+      setStatus(`Connected: ${activeTripCode} (live)`);
+    } finally {
+      isApplyingRemote = false;
+    }
+  });
+
+  setStatus(`Connected: ${activeTripCode} (live)`);
+}
+
+// Auth: anonymous
+onAuthStateChanged(auth, (user) => {
+  authed = !!user;
+  if (authed) {
+    setStatus(activeTripCode ? `Ready to connect: ${activeTripCode}` : "Ready. Enter Trip Code to sync.");
+  } else {
+    setStatus("Signing in...");
+  }
+});
+
+signInAnonymously(auth).catch(() => {
+  setStatus("Auth error (anonymous sign-in failed).");
+});
+
+// Events
 btnAddItem.addEventListener("click", () => addItem(itemInput.value));
 itemInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addItem(itemInput.value);
@@ -310,7 +437,7 @@ itemInput.addEventListener("keydown", (e) => {
 
 listSelect.addEventListener("change", () => {
   state.activeListId = listSelect.value;
-  saveState(state);
+  persist();
   renderItems();
 });
 
@@ -339,10 +466,16 @@ fileImport.addEventListener("change", (e) => {
 
 btnReset.addEventListener("click", hardReset);
 
-templates.forEach(btn => {
+templates.forEach((btn) => {
   btn.addEventListener("click", () => loadTemplate(btn.dataset.template));
 });
 
-/* initial render */
+btnConnect.addEventListener("click", () => connectTrip(tripCodeInput.value));
+tripCodeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") connectTrip(tripCodeInput.value);
+});
+
+// Initial render (local)
 renderLists();
 renderItems();
+setStatus("Ready. Enter Trip Code to sync.");
